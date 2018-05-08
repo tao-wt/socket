@@ -20,34 +20,35 @@ typedef	void Sigfunc(int); /* for signal handlers */
 void
 sig_chld(int signo)
 {
-	pid_t	pid;
-	int		stat;
+    pid_t pid;
+    int stat;
 
-	pid = wait(&stat);
-	printf("child %d terminated\n", pid);
-	return;
+    // pid = wait(&stat);
+    while ( (pid = waitpid(-1, &stat, WNOHANG)) > 0)
+        printf("child %d terminated\n", pid);
+    return;
 }
 
 Sigfunc *
 signal(int signo, Sigfunc *func)
 {
-	struct sigaction	act, oact;
+    struct sigaction	act, oact;
 
-	act.sa_handler = func;
-	sigemptyset(&act.sa_mask);
-	act.sa_flags = 0;
-	if (signo == SIGALRM) {
+    act.sa_handler = func;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+    if (signo == SIGALRM) {
 #ifdef	SA_INTERRUPT
-		act.sa_flags |= SA_INTERRUPT;	/* SunOS 4.x */
+        act.sa_flags |= SA_INTERRUPT;	/* SunOS 4.x */
 #endif
-	} else {
+    } else {
 #ifdef	SA_RESTART
-		act.sa_flags |= SA_RESTART;		/* SVR4, 44BSD */
+        act.sa_flags |= SA_RESTART;		/* SVR4, 44BSD */
 #endif
-	}
-	if (sigaction(signo, &act, &oact) < 0)
-		return(SIG_ERR);
-	return(oact.sa_handler);
+    }
+    if (sigaction(signo, &act, &oact) < 0)
+        return(SIG_ERR);
+    return(oact.sa_handler);
 }
 /* end signal */
 
