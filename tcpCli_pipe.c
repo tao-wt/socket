@@ -7,11 +7,18 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include "signal.c"
 
 #define SA struct sockaddr
 #define LISTENQ 1024 /* 2nd argument to listen() */
 #define SERV_PORT 9877 /* TCP and UDP */
 #define MAXLINE 4096 /* max text line length */
+
+void
+sig_pipe(){
+    printf("get the broken pipe signal.\n");
+    return;
+}
 
 ssize_t                        /* Write "n" bytes to a descriptor. */
 writen(int fd, const void *vptr, size_t n)
@@ -76,7 +83,7 @@ str_cli(FILE *fp, int sockfd)
         writen(sockfd, sendline+1, strlen(sendline)-1);
 
         if (readline(sockfd, recvline, MAXLINE) == 0)
-            printf("str_cli: server terminated prematurely");
+            printf("str_cli: server terminated prematurely\n");
 
         fputs(recvline, stdout);
     }
@@ -89,7 +96,7 @@ main(int argc, char **argv)
     uint16_t serPort;
     struct sockaddr_in    servaddr;
 
-    printf("argc is %d", argc);
+    printf("argc is %d\n", argc);
     if (argc != 3){
         printf("usage: tcpcli <IPaddress>");
         exit(1);
@@ -97,16 +104,18 @@ main(int argc, char **argv)
     sscanf(argv[2], "%d", &serPort);
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    printf("create socket ok:%d", sockfd);
+    printf("create socket ok:%d\n", sockfd);
 
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(serPort);
     inet_pton(AF_INET, argv[1], &servaddr.sin_addr);
 
-    printf("start to connect server %s", argv[1]);
+    printf("start to connect server %s\n", argv[1]);
     connect(sockfd, (SA *) &servaddr, sizeof(servaddr));
-    printf("connect ok!");
+    printf("connect ok!\n");
+
+    Signal(SIGPIPE, sig_pipe);
 
     str_cli(stdin, sockfd);        /* do it all */
 
