@@ -33,8 +33,11 @@ writen(int fd, const void *vptr, size_t n)
         if ( (nwritten = write(fd, ptr, nleft)) <= 0) {
             if (nwritten < 0 && errno == EINTR)
                 nwritten = 0;        /* and call write() again */
-            else
+            else {
+                if(nwritten < 0 && errno == EPIPE)
+                    printf("Get EPIPE error %d\n", EPIPE);
                 return(-1);            /* error */
+            }
         }
 
         nleft -= nwritten;
@@ -80,10 +83,15 @@ str_cli(FILE *fp, int sockfd)
         writen(sockfd, sendline, 1);
         sleep(3);
 
-        writen(sockfd, sendline+1, strlen(sendline)-1);
+        if (writen(sockfd, sendline+1, strlen(sendline)-1) == -1) {
+            printf("Socket write error\n");
+            exit(-1);
+        }
 
-        if (readline(sockfd, recvline, MAXLINE) == 0)
+        if (readline(sockfd, recvline, MAXLINE) == 0) {
             printf("str_cli: server terminated prematurely\n");
+            exit(-1);
+        }
 
         fputs(recvline, stdout);
     }

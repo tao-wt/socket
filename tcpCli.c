@@ -49,12 +49,20 @@ again:
             *ptr++ = c;
             if (c == '\n')
                 break;    /* newline is stored, like fgets() */
-        } else if (rc == 0) {
+        } else if (rc == 0 && errno == 0) {
             *ptr = 0;
             return(n - 1);    /* EOF, n - 1 bytes were read */
         } else {
             if (errno == EINTR)
                 goto again;
+            if (errno == ECONNRESET)
+                printf("Connect reset!\n");
+            if (errno == ETIMEDOUT)
+                printf("Time out!\n");
+            if (errno == ENETUNREACH)
+                printf("Net unreach\n");
+            if (errno == EHOSTUNREACH)
+                printf("Host unreach!\n");
             return(-1);        /* error, errno set by read() */
         }
     }
@@ -86,21 +94,27 @@ main(int argc, char **argv)
     uint16_t serPort;
     struct sockaddr_in    servaddr;
 
-    printf("argc is %d", argc);
+    printf("argc is %d\n", argc);
     if (argc != 3){
-        printf("usage: tcpcli <IPaddress>");
+        printf("usage: tcpcli ip port\n");
         exit(1);
     }
     sscanf(argv[2], "%d", &serPort);
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    printf("The socket is %d\n", sockfd);
 
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(serPort);
     inet_pton(AF_INET, argv[1], &servaddr.sin_addr);
 
-    connect(sockfd, (SA *) &servaddr, sizeof(servaddr));
+    printf("Start connect...\n");
+    if (connect(sockfd, (SA *) &servaddr, sizeof(servaddr)) < 0){
+        printf("connect error,exit.\n");
+        exit(1);
+    }
+    printf("connect ok!\n");
 
     str_cli(stdin, sockfd);        /* do it all */
 
