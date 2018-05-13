@@ -9,8 +9,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <sys/wait.h>
-
-typedef	void Sigfunc(int); /* for signal handlers */
+#include "signal.c"
 
 #define	SA struct sockaddr
 #define	LISTENQ	1024 /* 2nd argument to listen() */
@@ -29,28 +28,10 @@ sig_chld(int signo)
     return;
 }
 
-Sigfunc *
-signal(int signo, Sigfunc *func)
-{
-    struct sigaction	act, oact;
-
-    act.sa_handler = func;
-    sigemptyset(&act.sa_mask);
-    act.sa_flags = 0;
-    if (signo == SIGALRM) {
-#ifdef	SA_INTERRUPT
-        act.sa_flags |= SA_INTERRUPT;	/* SunOS 4.x */
-#endif
-    } else {
-#ifdef	SA_RESTART
-        act.sa_flags |= SA_RESTART;		/* SVR4, 44BSD */
-#endif
-    }
-    if (sigaction(signo, &act, &oact) < 0)
-        return(SIG_ERR);
-    return(oact.sa_handler);
+void
+sig_term(int signo){
+    printf("Get SIGTERM signo %d\n", signo);
 }
-/* end signal */
 
 ssize_t                        /* Write "n" bytes to a descriptor. */
 writen(int fd, const void *vptr, size_t n)
@@ -136,7 +117,8 @@ main(int argc, char **argv)
 
     listen(listenfd, LISTENQ);
 
-    signal(SIGCHLD, sig_chld);
+    Signal(SIGCHLD, sig_chld);
+    Signal(SIGTERM, sig_term);
 
     for ( ; ; ) {
         clilen = sizeof(cliaddr);
