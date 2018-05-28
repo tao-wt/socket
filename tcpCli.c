@@ -3,11 +3,14 @@
 #include <sys/socket.h>
 #include <netinet/in.h> /* sockaddr_in{} and other Internet defns */
 #include <string.h>
+#include <sys/select.h>
+#include <sys/time.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
 
+#define	max(a,b)    ((a) > (b) ? (a) : (b))
 #define SA struct sockaddr
 #define LISTENQ 1024 /* 2nd argument to listen() */
 #define SERV_PORT 9877 /* TCP and UDP */
@@ -74,16 +77,29 @@ again:
 void
 str_cli(FILE *fp, int sockfd)
 {
+    int maxfdp1;
+    fd_set rset;
     char sendline[MAXLINE], recvline[MAXLINE];
 
-    while (fgets(sendline, MAXLINE, fp) != NULL) {
+    FD_ZERO(&rset);
+    for ( ; ; ) {
+        FD_SET(fileno(fp), &rset);
+        FD_SET(sockfd, &rset);
+        maxfdp1 = max(fileno(fp), sockfd) + 1;
+        select(maxfdp1, &rset, NULL, NULL, NULL);
 
-        writen(sockfd, sendline, strlen(sendline));
-
-        if (readline(sockfd, recvline, MAXLINE) == 0)
-            printf("str_cli: server terminated prematurely");
-
-        fputs(recvline, stdout);
+        if (FD_ISSET(sockfd, &rset)) {
+            if (readline(sockfd, recvline, MAXLINE) == 0) {
+                printf("str_cli: server terminated prematurely\n");
+                exit(0);
+            }
+            fputs(recvline, stdout);
+        }
+        if (FD_ISSET(fileno(fp), &rset)) {
+           if (fgets(sendline, MAXLINE, fp) == NULL)
+               return;
+           writen(sockfd, sendline, strlen(sendline));
+        }
     }
 }
 
