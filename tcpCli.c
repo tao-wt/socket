@@ -98,6 +98,7 @@ str_cli(FILE *fp, int sockfd)
         if (FD_ISSET(fileno(fp), &rset)) {
            if (fgets(sendline, MAXLINE, fp) == NULL)
                return;
+           printf("sendline is:%s", sendline);
            writen(sockfd, sendline, strlen(sendline));
         }
     }
