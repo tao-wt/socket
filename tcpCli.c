@@ -77,29 +77,40 @@ again:
 void
 str_cli(FILE *fp, int sockfd)
 {
-    int maxfdp1;
+    int maxfdp1, stdineof;
     fd_set rset;
-    char sendline[MAXLINE], recvline[MAXLINE];
+    char buf[MAXLINE];
+    int n;
 
+    stdineof = 0;
     FD_ZERO(&rset);
     for ( ; ; ) {
-        FD_SET(fileno(fp), &rset);
+        if (stdineof == 0)
+            FD_SET(fileno(fp), &rset);
         FD_SET(sockfd, &rset);
         maxfdp1 = max(fileno(fp), sockfd) + 1;
         select(maxfdp1, &rset, NULL, NULL, NULL);
 
         if (FD_ISSET(sockfd, &rset)) {
-            if (readline(sockfd, recvline, MAXLINE) == 0) {
-                printf("str_cli: server terminated prematurely\n");
-                exit(0);
+            if ( (n = read(sockfd, buf, MAXLINE)) == 0) {
+                if (stdineof == 1)
+                    return;
+                else {
+                    printf("str_cli: server terminated prematurely\n");
+                    exit(1);
+                }
             }
-            fputs(recvline, stdout);
+            write(fileno(stdout), buf, n);
         }
         if (FD_ISSET(fileno(fp), &rset)) {
-           if (fgets(sendline, MAXLINE, fp) == NULL)
-               return;
-           printf("sendline is:%s", sendline);
-           writen(sockfd, sendline, strlen(sendline));
+           if ( (n = read(fileno(fp), buf, MAXLINE)) == 0) {
+               stdineof = 1;
+               shutdown(sockfd, SHUT_WR);
+               FD_CLR(fileno(fp), &rset);
+               continue;
+           }
+           printf("sendline is:%s", buf);
+           writen(sockfd, buf, n);
         }
     }
 }
