@@ -8,15 +8,17 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <signal.h>
-#include <sys/select.h>
+#include <poll.h>
 #include <sys/time.h>
 #include <sys/wait.h>
 #include "signal.c"
 
+#define INFTIM -1
 #define	SA struct sockaddr
 #define	LISTENQ	1024 /* 2nd argument to listen() */
 #define	SERV_PORT 9877 /* TCP and UDP */
 #define	MAXLINE	4096 /* max text line length */
+#define OPEN_MAX 1024
 
 void
 sig_chld(int signo)
@@ -103,12 +105,13 @@ str_echo(int sockfd)
 int
 main(int argc, char **argv)
 {
-    int       i, maxi, maxfd, listenfd, connfd, sockfd;
-    int       nready, client[FD_SETSIZE];
+    int       i, maxi, listenfd, connfd, sockfd;
+    int       nready;
     ssize_t   n;
-    fd_set    rset, allset;
+    // fd_set    rset, allset;
     char      buf[MAXLINE], buff[MAXLINE];
     socklen_t clilen, len;
+    struct pollfd client[OPEN_MAX];
     struct sockaddr_in cliaddr, servaddr, ss;
     len = sizeof(ss);
 
@@ -126,56 +129,62 @@ main(int argc, char **argv)
     // Signal(SIGCHLD, sig_chld);
     Signal(SIGTERM, sig_term);
 
-    printf("FD_SETSIZE is %d\n", FD_SETSIZE);
-    maxfd = listenfd;
-    maxi = -1;
-    for (i=0; i < FD_SETSIZE; i++)
-        client[i] = -1;
-    FD_ZERO(&allset);
-    FD_SET(listenfd, &allset);
+    printf("OPEN_MAX is %d\n", OPEN_MAX);
+    client[0].fd = listenfd;
+    client[0].events = POLLRDNORM;
+    maxi = 0;
+    for (i=1; i < OPEN_MAX; i++)
+        client[i].fd = -1;
 
     for ( ; ; ) {
-        rset = allset;
-        nready = select(maxfd+1, &rset, NULL, NULL, NULL);
+        // rset = allset;
+        nready = poll(client, maxi + 1, INFTIM);
 
-        if (FD_ISSET(listenfd, &rset)){
+        if (client[0].revents & POLLRDNORM){
             clilen = sizeof(cliaddr);
             connfd = accept(listenfd, (SA *) &cliaddr, &clilen);
             printf("connect from %s, port %d\n",
                 inet_ntop(AF_INET, &cliaddr.sin_addr, buff, sizeof(buff)),
                 ntohs(cliaddr.sin_port));
 
-            for (i=0; i < FD_SETSIZE; i++)
-                if (client[i] < 0) {
-                    client[i] = connfd;
+            for (i = 1; i < OPEN_MAX; i++)
+                if (client[i].fd < 0) {
+                    client[i].fd = connfd;
                     break;
                 }
             printf("put to client ok\n");
-            if (i == FD_SETSIZE) {
+            if (i == OPEN_MAX) {
                 printf("too many clients");
                 exit(1);
             }
-            FD_SET(connfd, &allset);
-            printf("set sonnfd fd_set ok: %d\n",connfd);
-            if (connfd > maxfd)
-                maxfd = connfd;
+            client[i].events = POLLRDNORM;
+            printf("set sonnfd events ok: %d\n",connfd);
             if (i > maxi)
                 maxi = i;
             if (--nready <= 0)
                 continue;
         }
 
-        for (i = 0; i<= maxi; i++) {
-            if ( (sockfd = client[i]) < 0)
+        for (i = 1; i<= maxi; i++) {
+            if ( (sockfd = client[i].fd) < 0)
                 continue;
-            if (FD_ISSET(sockfd, &rset)) {
+            if (client[i].revents & (POLLRDNORM | POLLERR)) {
                 if ( (n = read(sockfd, buf, MAXLINE)) == 0) {
                     close(sockfd);
-                    FD_CLR(sockfd, &allset);
-                    client[i] = -1;
-                } else {
-                    if (getpeername(sockfd, (SA *) &ss, &len) < 0)
+                    client[i].fd = -1;
+                } else if (n < 0){
+                    if (errno == ECONNRESET){
+                        close(sockfd);
+                        client[i].fd = -1;
+                    } else{
+                        printf("read error\n");
                         exit(1);
+                    }
+                } else {
+                    if (getpeername(sockfd, (SA *) &ss, &len) < 0) {
+                        printf("get peer name error\n");
+                        exit(1);
+                    }
                     printf("sent date to %s, port %d\n",
                         inet_ntop(AF_INET, &ss.sin_addr, buff, sizeof(buff)),
                         ntohs(ss.sin_port));
